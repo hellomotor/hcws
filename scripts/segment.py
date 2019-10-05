@@ -13,7 +13,7 @@ import grpc
 from tensorflow_serving.apis import predict_pb2
 from tensorflow_serving.apis import prediction_service_pb2_grpc
 from tensorflow.python.framework import tensor_util
-from kcws.train.bert import tokenization
+from hcws.bert import tokenization
 
 
 Q2B_DICT_FILE = '/home/heqing/git_repo/kcws/scripts/q2b.dic'

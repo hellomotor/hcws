@@ -1,12 +1,11 @@
 # -*- coding:utf-8 -*-
 import json
 import os
-import io
 import tensorflow as tf
 from absl import flags, app, logging
 
 from input_fns import filed_based_convert_examples_to_features, CwsProcessor, file_based_input_fn_builder
-import tokenization
+from bert import tokenization
 
 Q2B_DICT_FILE = '/home/heqing/git_repo/kcws/scripts/q2b.dic'
 
@@ -19,7 +18,6 @@ flags.DEFINE_integer("max_seq_length", 200, "")
 flags.DEFINE_integer("batch_size", 16, "")
 flags.DEFINE_integer("num_train_epochs", 10, "")
 flags.DEFINE_bool("do_lower_case", True, "")
-flags.DEFINE_string('q2b_file', Q2B_DICT_FILE, '')
 
 
 def dump_dataset_info(output_dir, split, split_info):
@@ -29,7 +27,6 @@ def dump_dataset_info(output_dir, split, split_info):
 
 
 def main(_):
-    q2b_dict = dict([line.strip('\n').split('\t') for line in io.open(FLAGS.q2b_file, encoding='utf8')])
     processor = CwsProcessor(FLAGS.output_dir)
     tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
 

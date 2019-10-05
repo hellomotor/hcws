@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 from tensorflow.contrib import predictor
 import sys
-import tokenization
+from bert import tokenization
 from absl import flags, app
 import json
 import os

@@ -1,6 +1,5 @@
 import tensorflow as tf
-import modeling
-import optimization
+from bert import modeling, optimization
 
 
 def model_fn_builder(bert_config,

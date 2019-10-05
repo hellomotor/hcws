@@ -6,7 +6,7 @@ import json
 import tensorflow as tf
 from pathlib import Path
 
-import modeling
+from bert import modeling
 from input_fns import CwsProcessor
 from model_fns import model_fn_builder
 

@@ -4,7 +4,7 @@ import collections
 import tensorflow as tf
 import os
 import codecs
-import tokenization
+from bert import tokenization
 from absl import logging
 import pickle
 import re
@@ -64,10 +64,9 @@ class DataProcessor(object):
 
 
 class CwsProcessor(DataProcessor):
-    def __init__(self, output_dir, q2b_dict=None):
+    def __init__(self, output_dir):
         self.labels = set()
         self.output_dir = output_dir
-        self.q2b_dict = q2b_dict
 
     def get_train_examples(self, data_dir):
         return self._create_example(
@@ -132,10 +131,7 @@ class CwsProcessor(DataProcessor):
             lines = []
             for line in tqdm(f):
                 words, labels = [], []
-                if self.q2b_dict:
-                    contents = ''.join([self.q2b_dict.get(c, c) for c in line.strip('\n')])
-                else:
-                    contents = line.strip('\n')
+                contents = line.strip('\n')
                 line = re.sub(ur'\s(?=[^\[\]]*])', delimiter, contents)
                 for text in self._extract_tokens(line, delimiter=delimiter):
                     i = text.rfind(u'/')
@@ -168,7 +164,7 @@ def write_test_tokens(tokens, output_dir):
                 wf.write(token + '\n')
 
 
-def convert_single_example(ex_index, example, label_list, max_seq_length, tokenizer, output_dir, mode):
+def convert_single_example(ex_index, example, label_map, max_seq_length, tokenizer, output_dir, mode):
     """
     将一个样本进行分析，然后将字转化为id, 标签转化为id,然后结构化到InputFeatures对象中
     :param ex_index: index
@@ -180,14 +176,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length, tokeni
     :param mode:
     :return:
     """
-    label_map = {}
-    # 1表示从1开始对label进行index化
-    for (i, label) in enumerate(label_list, 1):
-        label_map[label] = i
-    # 保存label->index 的map
-    if not os.path.exists(os.path.join(output_dir, 'label2id.pkl')):
-        with codecs.open(os.path.join(output_dir, 'label2id.pkl'), 'wb') as w:
-            pickle.dump(label_map, w)
 
     textlist = example.text.split(' ')
     labellist = example.label.split(' ')
@@ -272,13 +260,22 @@ def filed_based_convert_examples_to_features(
     :param mode:
     :return:
     """
+    label_map = {}
+    # 1表示从1开始对label进行index化
+    for (i, label) in enumerate(label_list, 1):
+        label_map[label] = i
+    # 保存label->index 的map
+    if not os.path.exists(os.path.join(output_dir, 'label2id.pkl')):
+        with codecs.open(os.path.join(output_dir, 'label2id.pkl'), 'wb') as w:
+            pickle.dump(label_map, w)
+
     writer = tf.python_io.TFRecordWriter(output_file)
     # 遍历训练数据
     for (ex_index, example) in enumerate(examples):
         if ex_index % 5000 == 0:
             logging.info("Writing example %d of %d" % (ex_index, len(examples)))
         # 对于每一个训练样本,
-        feature = convert_single_example(ex_index, example, label_list, max_seq_length, tokenizer, output_dir, mode)
+        feature = convert_single_example(ex_index, example, label_map, max_seq_length, tokenizer, output_dir, mode)
 
         def create_int_feature(values):
             f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))

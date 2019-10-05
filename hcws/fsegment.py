@@ -10,8 +10,7 @@ import tensorflow as tf
 from absl import flags, app
 from pathlib import Path
 
-import modeling
-import tokenization
+from bert import modeling, tokenization
 from input_fns import CwsProcessor
 from model_fns import model_fn_builder
 
