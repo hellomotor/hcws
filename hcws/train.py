@@ -13,7 +13,6 @@ flags = tf.flags
 
 flags.DEFINE_string("train_data_path", default=None, help="")
 flags.DEFINE_string("test_data_path", default=None, help="")
-flags.DEFINE_string("label_dict_path", default=None, help="")
 
 flags.DEFINE_integer("batch_size", default=128, help="")
 flags.DEFINE_float("learning_rate", default=1e-5, help="")
