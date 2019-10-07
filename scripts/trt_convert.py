@@ -6,6 +6,7 @@ from absl import flags, app
 FLAGS = flags.FLAGS
 flags.DEFINE_string('data_dir', None, '')
 flags.DEFINE_string('model', None, '')
+flags.DEFINE_integer('batch_size', 128, '')
 
 TRT_SUFFIX = '_fp32_trt'
 output_names = ['ReverseSequence_1:0', 'Sum:0']
@@ -21,7 +22,7 @@ def main(_):
     trt_graph = trt.create_inference_graph(
         input_graph_def=graph_def,
         outputs=output_names,
-        max_batch_size=1,
+        max_batch_size=FLAGS.batch_size,
         max_workspace_size_bytes=1 << 26,
         precision_mode='FP32',
         minimum_segment_size=2
