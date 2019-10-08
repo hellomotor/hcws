@@ -23,9 +23,9 @@ def main(_):
         input_graph_def=graph_def,
         outputs=output_names,
         max_batch_size=FLAGS.batch_size,
-        max_workspace_size_bytes=1 << 26,
+        max_workspace_size_bytes=(1 << 30) * 4,
         precision_mode='FP32',
-        minimum_segment_size=2
+        minimum_segment_size=10
     )
     print("------------- Write optimized model to the file -------------")
     with open(os.path.join(FLAGS.data_dir, FLAGS.model + TRT_SUFFIX + '.pb'), 'wb') as f:
