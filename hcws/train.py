@@ -93,9 +93,23 @@ def main(_):
         FLAGS.max_sequence_length,
         is_training=False,
         drop_remainder=False)
+
+    serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn({
+        'input_ids': tf.placeholder(tf.int32, [None, FLAGS.max_sequence_length], name='input_ids'),
+        'input_mask': tf.placeholder(tf.int32, [None, FLAGS.max_sequence_length], name='input_mask'),
+        'segment_ids': tf.placeholder(tf.int32, [None, FLAGS.max_sequence_length], name='segment_ids'),
+    })
     try:
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=train_data_info['num_train_steps'])
-        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn)
+        train_spec = tf.estimator.TrainSpec(
+            input_fn=train_input_fn,
+            max_steps=train_data_info['num_train_steps'])
+        exporter = tf.estimator.BestExporter(
+            name="best_exporter",
+            serving_input_receiver_fn=serving_input_receiver_fn,
+            exports_to_keep=2)
+        eval_spec = tf.estimator.EvalSpec(
+            input_fn=eval_input_fn,
+            exporter=exporter)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     except KeyboardInterrupt:
         tf.logging.info('User interrupted.')
