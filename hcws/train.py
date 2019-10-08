@@ -19,6 +19,8 @@ flags.DEFINE_float("learning_rate", default=1e-5, help="")
 flags.DEFINE_float("dropout", default=0.5, help="")
 flags.DEFINE_integer("max_sequence_length", default=200, help="")
 
+tf.app.flags.DEFINE_bool("use_crf", default=True, help="")
+
 flags.DEFINE_string("ckpt_dir", default=None, help="")
 flags.DEFINE_integer("save_checkpoints_steps", default=1000, help="")
 flags.DEFINE_integer("log_step_count_steps", default=100, help="")
@@ -65,7 +67,8 @@ def main(_):
         FLAGS.max_sequence_length,
         train_data_info['num_train_steps'],
         num_warmup_steps,
-        FLAGS.init_checkpoint)
+        FLAGS.init_checkpoint,
+        use_crf=FLAGS.use_crf)
 
     estimator = tf.estimator.Estimator(
         model_fn,
@@ -109,7 +112,7 @@ def main(_):
             exports_to_keep=2)
         eval_spec = tf.estimator.EvalSpec(
             input_fn=eval_input_fn,
-            exporter=exporter)
+            exporters=exporter)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     except KeyboardInterrupt:
         tf.logging.info('User interrupted.')
