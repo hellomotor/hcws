@@ -1,5 +1,6 @@
 import tensorflow as tf
 from bert import modeling, optimization
+from absl import logging
 
 
 def model_fn_builder(bert_config,
@@ -45,6 +46,11 @@ def model_fn_builder(bert_config,
             log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(
                 logits, label_ids, seq_lengths, crf_params)
             loss = tf.reduce_mean(-log_likelihood)
+        logging.info('*' * 120)
+        logging.info('input_ids: {}, input_mask: {}, segment_ids: {}'.format(input_ids, input_mask, segment_ids))
+        logging.info('-' * 120)
+        logging.info('seq_lengths: {}, pred_ids: {}'.format(seq_lengths, pred_ids))
+        logging.info('*' * 120)
 
         tvars = tf.trainable_variables()
         if init_checkpoint:
