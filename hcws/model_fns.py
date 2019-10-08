@@ -83,7 +83,6 @@ def model_fn_builder(bert_config,
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 predictions={
-                    "input_ids": input_ids,
                     "seq_lens": seq_lengths,
                     "predictions": pred_ids
                 })
