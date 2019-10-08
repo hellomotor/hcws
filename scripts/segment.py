@@ -14,9 +14,11 @@ from tensorflow.python.framework import tensor_util
 from hcws.bert import tokenization
 from hcws.utils import create_feature_from_tokens, label_decode
 
-Q2B_DICT_FILE = '/home/heqing/git_repo/kcws/scripts/q2b.dic'
-LABEL_DICT_FILE = '/home/heqing/git_repo/kcws/corpus/RMRB/train/label2id.pkl'
-BERT_BASE_DIR = '/home/heqing/git_repo/tf_ner/bert_lstm_crf/chinese_L-12_H-768_A-12'
+HOME = os.path.expanduser('~')
+
+Q2B_DICT_FILE = os.path.join(HOME, 'git_repo/hcws/scripts/q2b.dic')
+LABEL_DICT_FILE = os.path.join(HOME, 'git_repo/hcws/corpus/RMRB/train/label2id.pkl')
+BERT_BASE_DIR = os.path.join(HOME, 'git_repo/tf_ner/bert_lstm_crf/chinese_L-12_H-768_A-12')
 BERT_VOCAB = os.path.join(BERT_BASE_DIR, 'vocab.txt')
 
 FLAGS = flags.FLAGS
@@ -47,34 +49,41 @@ def inference(stub, features):
     return stub.Predict(request, 3.0)
 
 
+def predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text):
+    feature = create_feature_from_tokens(tokenizer, q2b_dict, batch_of_text, FLAGS.max_sequence_length)
+    result = inference(stub, feature)
+    input_ids = tensor_util.MakeNdarray(result.outputs['input_ids'])
+    seq_lens = tensor_util.MakeNdarray(result.outputs['seq_lens'])
+    pred_ids = tensor_util.MakeNdarray(result.outputs['predictions'])
+    for i in range(pred_ids.shape[0]):
+        end = seq_lens[i]  # [CLS] ... [SEP]
+        label_ids = pred_ids[i][:end]
+        token_ids = input_ids[i][:end]
+        labels = [id_to_label.get(_id, 'O') for _id in label_ids[1:-1]]
+        tokens = tokenizer.convert_ids_to_tokens(token_ids[1:-1])
+        output = label_decode(tokens, labels)
+        print((u''.join(output)).encode('utf8'))
+
+
 def main(_):
     label_to_id = pickle.load(open(FLAGS.label_dict_file, 'rb'))
     id_to_label = dict([(v, k) for k, v in label_to_id.items()])
     q2b_dict = dict([line.strip('\n').split('\t') for line in io.open(FLAGS.q2b_file, encoding='utf8')])
 
     tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
-    batch_of_text, batch_of_length = [], []
+    batch_of_text = []
     stub = create_grpc_stub()
     for line in io.open(FLAGS.input_file, encoding='utf8'):
-        contents = line.strip('\n')
+        contents = line.strip('\n')[:FLAGS.max_sequence_length]
         words = [w for w in contents]
         if len(batch_of_text) < FLAGS.batch_size:
             batch_of_text.append(words)
-            if len(words) >= FLAGS.max_sequence_length - 1:
-                batch_of_length.append(FLAGS.max_sequence_length - 2)
-            else:
-                batch_of_length.append(len(words))
             continue
-        feature = create_feature_from_tokens(tokenizer, q2b_dict, batch_of_text, FLAGS.max_sequence_length)
-        result = inference(stub, feature)
-        pred_ids = tensor_util.MakeNdarray(result.outputs['output'])
-        for i in range(pred_ids.shape[0]):
-            end = batch_of_length[i] + 2  # [CLS] ... [SEP]
-            _ids = pred_ids[i][:end]
-            labels = [id_to_label.get(_id, 'O') for _id in _ids[1:-1]]
-            output = label_decode(batch_of_text[i], labels)
-            print((u''.join(output)).encode('utf8'))
-        batch_of_text[:], batch_of_length[:] = [], []
+        predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text)
+        batch_of_text[:] = []
+    if batch_of_text:
+        predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text)
+        batch_of_text[:] = []
 
 
 if __name__ == '__main__':

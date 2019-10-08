@@ -6,7 +6,7 @@ from absl import flags, app
 FLAGS = flags.FLAGS
 flags.DEFINE_string('data_dir', None, '')
 flags.DEFINE_string('model', None, '')
-flags.DEFINE_integer('batch_size', 128, '')
+flags.DEFINE_integer('batch_size', 16, '')
 
 TRT_SUFFIX = '_fp32_trt'
 output_names = ['ReverseSequence_1:0', 'Sum:0']
@@ -23,9 +23,9 @@ def main(_):
         input_graph_def=graph_def,
         outputs=output_names,
         max_batch_size=FLAGS.batch_size,
-        max_workspace_size_bytes=1 << 26,
+        max_workspace_size_bytes=(1 << 30) * 4,
         precision_mode='FP32',
-        minimum_segment_size=2
+        minimum_segment_size=10
     )
     print("------------- Write optimized model to the file -------------")
     with open(os.path.join(FLAGS.data_dir, FLAGS.model + TRT_SUFFIX + '.pb'), 'wb') as f:

@@ -14,6 +14,9 @@ LABEL_DICT_FILE = os.path.join(HOME, 'git_repo/hcws/corpus/RMRB/train/label2id.p
 BERT_BASE_DIR = os.path.join(HOME, 'git_repo/tf_ner/bert_lstm_crf/chinese_L-12_H-768_A-12')
 BERT_VOCAB = os.path.join(BERT_BASE_DIR, 'vocab.txt')
 
+INPUT_IDS, INPUT_MASK, SEGMENT_IDS = 'IteratorGetNext:0', 'IteratorGetNext:1', 'IteratorGetNext:3'
+OUTPUT_PREDS, OUTPUT_SQLS = 'ReverseSequence_1:0', 'Sum:0'
+
 FLAGS = flags.FLAGS
 flags.DEFINE_string('trt_pb_path', None, '')
 flags.DEFINE_string('input_file', None, '')
@@ -21,7 +24,7 @@ flags.DEFINE_string('label_dict_file', LABEL_DICT_FILE, '')
 flags.DEFINE_string('q2b_file', Q2B_DICT_FILE, '')
 flags.DEFINE_string('vocab_file', BERT_VOCAB, '')
 flags.DEFINE_integer('max_sequence_length', 200, '')
-flags.DEFINE_integer('batch_size', 10, '')
+flags.DEFINE_integer('batch_size', 16, '')
 
 
 def load_frozen_graph_def(frozen_graph_filename):
@@ -38,21 +41,19 @@ def inference(trt_pb_path, tokenizer, q2b_dict, id_to_label):
         trt_graph_def.ParseFromString(f.read())
 
     tf.reset_default_graph()
+    return_elements = [INPUT_IDS, INPUT_MASK, SEGMENT_IDS, OUTPUT_PREDS, OUTPUT_SQLS]
     # load optimized graph_def to default graph
-    graph = load_graph(trt_graph_def)
-    # for op in graph.get_operations():
-    #    sys.stderr.write(op.name + '\n')
+    with tf.Graph().as_default() as graph:
+        input_output_tensors = tf.import_graph_def(
+            trt_graph_def,
+            input_map=None,
+            return_elements=return_elements)
     gpu_ops = tf.GPUOptions(per_process_gpu_memory_fraction=0.50)
     session_conf = tf.ConfigProto(allow_soft_placement=True,
                                   gpu_options=gpu_ops,
                                   inter_op_parallelism_threads=0,
                                   intra_op_parallelism_threads=0)
     sess = tf.Session(graph=graph, config=session_conf)
-    t_preds = graph.get_tensor_by_name('ReverseSequence_1:0')
-    t_sqls = graph.get_tensor_by_name('Sum:0')
-    t_input_ids = graph.get_tensor_by_name('IteratorGetNext:0')
-    t_input_mask = graph.get_tensor_by_name('IteratorGetNext:1')
-    t_segment_ids = graph.get_tensor_by_name('IteratorGetNext:3')
     batch_of_text = []
     for line in io.open(FLAGS.input_file, encoding='utf8'):
         contents = line.strip('\n')[:FLAGS.max_sequence_length]
@@ -60,31 +61,29 @@ def inference(trt_pb_path, tokenizer, q2b_dict, id_to_label):
         if len(batch_of_text) < FLAGS.batch_size:
             batch_of_text.append(words)
             continue
-        feature = create_feature_from_tokens(tokenizer, q2b_dict, batch_of_text, FLAGS.max_sequence_length)
-        feed_dict = {t_input_ids: feature['input_ids'],
-                     t_input_mask: feature['input_mask'],
-                     t_segment_ids: feature['segment_ids']}
-        pred_ids, seq_lens = sess.run([t_preds, t_sqls], feed_dict=feed_dict)
-        for i in range(pred_ids.shape[0]):
-            end = seq_lens[i] + 2  # [CLS] ... [SEP]
-            _ids = pred_ids[i][:end]
-            labels = [id_to_label.get(_id, 'O') for _id in _ids[1:-1]]
-            output = label_decode(batch_of_text[i], labels)
-            print((u''.join(output)).encode('utf8'))
+        predict(sess, batch_of_text, tokenizer, q2b_dict, input_output_tensors, id_to_label)
+        batch_of_text[:] = []
+    if batch_of_text:
+        predict(sess, batch_of_text, tokenizer, q2b_dict, input_output_tensors, id_to_label)
         batch_of_text[:] = []
 
 
-def load_graph(graph_def):
-    with tf.Graph().as_default() as graph:
-        tf.import_graph_def(
-            graph_def,
-            input_map=None,
-            return_elements=None,
-            op_dict=None,
-            producer_op_list=None,
-            name='')
-
-    return graph
+def predict(session, batch_of_text, tokenizer, q2b_dict, input_output_tensors, id_to_label):
+    (t_input_ids, t_input_mask, t_segment_ids, t_preds, t_sqls) = input_output_tensors
+    feature = create_feature_from_tokens(tokenizer, q2b_dict, batch_of_text, FLAGS.max_sequence_length)
+    feed_dict = {t_input_ids: feature['input_ids'],
+                 t_input_mask: feature['input_mask'],
+                 t_segment_ids: feature['segment_ids']}
+    pred_ids, seq_lens, input_ids = session.run(
+        [t_preds, t_sqls, t_input_ids], feed_dict=feed_dict)
+    for i in range(pred_ids.shape[0]):
+        end = seq_lens[i]  # [CLS] ... [SEP]
+        label_ids = pred_ids[i][:end]
+        token_ids = input_ids[i][:end]
+        labels = [id_to_label.get(_id, 'O') for _id in label_ids[1:-1]]
+        tokens = tokenizer.convert_ids_to_tokens(token_ids[1:-1])
+        output = label_decode(tokens, labels)
+        print((u''.join(output)).encode('utf8'))
 
 
 def main(_):
