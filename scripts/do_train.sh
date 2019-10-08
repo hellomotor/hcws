@@ -1,13 +1,14 @@
 argc=$#
 if [ $argc -lt 1 ]; then
   echo "Usage: $0 <dataset>"
+  exit 1
 fi
 DATASET=$1
 
 ROOT_DIR=$HOME/git_repo/hcws
 DATA_DIR=$ROOT_DIR/corpus/$DATASET
 TRAIN_DIR=$DATA_DIR/train
-BERT_DIR=$HOME/Downloads/chinese_L-12_H-768_A-12
+BERT_DIR=$HOME/git_repo/tf_ner/bert_lstm_crf/chinese_L-12_H-768_A-12
 
 cd $ROOT_DIR
 cmd="python hcws/train.py \
