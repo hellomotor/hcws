@@ -25,6 +25,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('input_file', None, '')
 flags.DEFINE_string('label_dict_file', LABEL_DICT_FILE, '')
 flags.DEFINE_string('q2b_file', Q2B_DICT_FILE, '')
+flags.DEFINE_string('model_name', None, '')
 flags.DEFINE_string('vocab_file', BERT_VOCAB, '')
 flags.DEFINE_integer('max_sequence_length', 200, '')
 flags.DEFINE_integer('batch_size', 10, '')
@@ -38,7 +39,7 @@ def create_grpc_stub():
 
 def inference(stub, features):
     request = predict_pb2.PredictRequest()
-    request.model_spec.name = 'saved_model'
+    request.model_spec.name = FLAGS.model_name
     request.model_spec.signature_name = 'serving_default'
     for k in ('input_ids', 'input_mask', 'segment_ids'):
         request.inputs[k].CopyFrom(
@@ -52,9 +53,9 @@ def inference(stub, features):
 def predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text):
     feature = create_feature_from_tokens(tokenizer, q2b_dict, batch_of_text, FLAGS.max_sequence_length)
     result = inference(stub, feature)
-    input_ids = tensor_util.MakeNdarray(result.outputs['input_ids'])
     seq_lens = tensor_util.MakeNdarray(result.outputs['seq_lens'])
     pred_ids = tensor_util.MakeNdarray(result.outputs['predictions'])
+    input_ids = feature['input_ids']
     for i in range(pred_ids.shape[0]):
         end = seq_lens[i]  # [CLS] ... [SEP]
         label_ids = pred_ids[i][:end]
@@ -90,6 +91,7 @@ if __name__ == '__main__':
     flags.mark_flag_as_required('input_file')
     flags.mark_flag_as_required('label_dict_file')
     flags.mark_flag_as_required('vocab_file')
+    flags.mark_flag_as_required('model_name')
     try:
         app.run(main)
     except KeyboardInterrupt:
