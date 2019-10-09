@@ -19,3 +19,4 @@ data/
 *.txt
 kcws/models
 tf_dist/
+models/
