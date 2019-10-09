@@ -77,7 +77,7 @@ def model_fn_builder(bert_config,
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             train_op = optimization.create_optimizer(
-                loss, learning_rate, num_train_steps, num_warmup_steps, False)
+                loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=use_tpu)
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=loss,
