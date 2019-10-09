@@ -60,19 +60,9 @@ def model_fn_builder(bert_config,
                 mask = tf.sequence_mask(seq_lengths)
                 losses = tf.boolean_mask(losses, mask)
                 loss = tf.reduce_mean(losses)
-                # one_hot_labels = tf.one_hot(label_ids, depth=num_tags, dtype=tf.float32)
-                # cross_entropy = one_hot_labels * tf.log(probabilities)
-                # cross_entropy = -tf.reduce_sum(cross_entropy, reduction_indices=2)
-                # cross_entropy *= tf.to_float(used)
-                # cross_entropy = tf.reduce_sum(cross_entropy, reduction_indices=1)
-                # cross_entropy /= tf.cast(seq_lengths, tf.float32)
-                # loss = tf.reduce_mean(cross_entropy)
 
-        logging.info('*' * 120)
-        logging.info('input_ids: {}, input_mask: {}, segment_ids: {}'.format(input_ids, input_mask, segment_ids))
-        logging.info('-' * 120)
-        logging.info('seq_lengths: {}, pred_ids: {}'.format(seq_lengths, pred_ids))
-        logging.info('*' * 120)
+        seq_lengths = tf.identity(seq_lengths, name='seq_lengths')
+        pred_ids = tf.identity(pred_ids, name='pred_ids')
 
         tvars = tf.trainable_variables()
         if init_checkpoint:

@@ -75,13 +75,17 @@ def main(_):
     batch_of_text = []
     stub = create_grpc_stub()
     for line in io.open(FLAGS.input_file, encoding='utf8'):
-        contents = line.strip('\n')[:FLAGS.max_sequence_length]
-        words = [w for w in contents]
+        contents = line.strip()[:FLAGS.max_sequence_length]
+        if not contents:
+            continue
         if len(batch_of_text) < FLAGS.batch_size:
+            words = [w for w in contents]
             batch_of_text.append(words)
             continue
         predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text)
         batch_of_text[:] = []
+    print('-' * 120)
+    print(len(batch_of_text))
     if batch_of_text:
         predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text)
         batch_of_text[:] = []

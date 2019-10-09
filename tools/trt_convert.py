@@ -9,7 +9,8 @@ flags.DEFINE_string('model', None, '')
 flags.DEFINE_integer('batch_size', 16, '')
 
 TRT_SUFFIX = '_fp32_trt'
-output_names = ['ReverseSequence_1:0', 'Sum:0']
+#output_names = ['ReverseSequence_1:0', 'Sum:0']  # CRF
+output_names = ['pred_ids:0', 'seq_lengths:0'] # Softmax
 
 
 def main(_):

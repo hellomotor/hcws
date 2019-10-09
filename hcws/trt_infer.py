@@ -15,7 +15,7 @@ BERT_BASE_DIR = os.path.join(HOME, 'git_repo/tf_ner/bert_lstm_crf/chinese_L-12_H
 BERT_VOCAB = os.path.join(BERT_BASE_DIR, 'vocab.txt')
 
 INPUT_IDS, INPUT_MASK, SEGMENT_IDS = 'IteratorGetNext:0', 'IteratorGetNext:1', 'IteratorGetNext:3'
-OUTPUT_PREDS, OUTPUT_SQLS = 'ReverseSequence_1:0', 'Sum:0'
+OUTPUT_PREDS, OUTPUT_SQLS = 'pred_ids:0', 'seq_lengths:0'
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('trt_pb_path', None, '')
