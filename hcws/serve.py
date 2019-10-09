@@ -1,6 +1,6 @@
 # encoding: utf-8
 """Reload and serve a saved model"""
-
+import io
 import numpy as np
 from pathlib import Path
 from tensorflow.contrib import predictor
@@ -43,7 +43,7 @@ def main(_):
         if inputs.lower() == 'quit':
             break
         words = [w for w in inputs]
-        feature = create_feature_from_tokens(tokenizer, q2b_dict, [words], 200):
+        feature = create_feature_from_tokens(tokenizer, q2b_dict, [words], 200)
         predictions = predict_fn({
             'input_ids': feature['input_ids'],
             'input_mask': feature['input_mask'],
