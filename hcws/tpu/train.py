@@ -5,8 +5,8 @@ import json
 import tensorflow as tf
 import os
 
-from bert import modeling
-from input_fns import file_based_input_fn_builder, CwsProcessor
+from hcws.bert import modeling
+from hcws.input_fns import file_based_input_fn_builder, CwsProcessor
 from model_fns import model_fn_builder
 
 flags = tf.flags
@@ -24,6 +24,7 @@ flags.DEFINE_integer("max_sequence_length", default=200, help="")
 tf.app.flags.DEFINE_bool("use_crf", default=True, help="")
 
 flags.DEFINE_string("ckpt_dir", default=None, help="")
+flags.DEFINE_string("export_dir_base", default=None, help="")
 flags.DEFINE_integer("save_checkpoints_steps", default=1000, help="")
 flags.DEFINE_integer("log_step_count_steps", default=100, help="")
 flags.DEFINE_integer("early_stopping_step", default=4,
@@ -113,10 +114,12 @@ def main(_):
     estimator = tf.contrib.tpu.TPUEstimator(
         use_tpu=FLAGS.use_tpu,
         model_fn=model_fn,
+        params=params,
         config=run_config,
         train_batch_size=FLAGS.train_batch_size,
         eval_batch_size=FLAGS.eval_batch_size,
-        predict_batch_size=FLAGS.predict_batch_size)
+        predict_batch_size=FLAGS.predict_batch_size,
+        export_to_tpu=False)
 
     if FLAGS.do_train:
         train_input_fn = file_based_input_fn_builder(
@@ -139,13 +142,13 @@ def main(_):
             FLAGS.max_sequence_length,
             is_training=False,
             drop_remainder=False)
-        result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
-        output_eval_file = os.path.join(FLAGS.ckpt_dir, "eval_results.txt")
-        with tf.gfile.GFile(output_eval_file, "w") as writer:
-            tf.logging.info("***** Eval results *****")
-            for key in sorted(result.keys()):
-                tf.logging.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+        estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+        serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn({
+            'input_ids': tf.placeholder(tf.int32, [None, FLAGS.max_sequence_length], name='input_ids'),
+            'input_mask': tf.placeholder(tf.int32, [None, FLAGS.max_sequence_length], name='input_mask'),
+            'segment_ids': tf.placeholder(tf.int32, [None, FLAGS.max_sequence_length], name='segment_ids'),
+        })
+        estimator.export_saved_model(FLAGS.export_dir_base, serving_input_receiver_fn)
 
 
 if __name__ == '__main__':
