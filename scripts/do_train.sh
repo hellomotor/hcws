@@ -4,7 +4,7 @@ if [ $argc -lt 1 ]; then
   exit 1
 fi
 DATASET=$1
-
+USE_CRF=False
 ROOT_DIR=$HOME/git_repo/hcws
 DATA_DIR=$ROOT_DIR/corpus/$DATASET
 TRAIN_DIR=$DATA_DIR/train
@@ -20,6 +20,7 @@ cmd="python hcws/train.py \
 	--ckpt_dir=$TRAIN_DIR/logs_bert \
 	--bert_config_file=$BERT_DIR/bert_config.json \
 	--vocab_file=$BERT_DIR/vocab.txt \
-	--init_checkpoint=$BERT_DIR/bert_model.ckpt"
+	--init_checkpoint=$BERT_DIR/bert_model.ckpt \
+	--use_crf=$USE_CRF"
 echo $cmd
 eval $cmd
