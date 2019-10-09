@@ -21,6 +21,7 @@ flags.DEFINE_integer("predict_batch_size", default=16, help="")
 flags.DEFINE_float("learning_rate", default=1e-5, help="")
 flags.DEFINE_float("dropout", default=0.5, help="")
 flags.DEFINE_integer("max_sequence_length", default=200, help="")
+tf.app.flags.DEFINE_bool("use_crf", default=True, help="")
 
 flags.DEFINE_string("ckpt_dir", default=None, help="")
 flags.DEFINE_integer("save_checkpoints_steps", default=1000, help="")
@@ -105,7 +106,9 @@ def main(_):
         FLAGS.max_sequence_length,
         train_data_info['num_train_steps'],
         num_warmup_steps,
-        FLAGS.init_checkpoint)
+        FLAGS.init_checkpoint,
+        use_crf=FLAGS.use_crf,
+        use_tpu=FLAGS.use_tpu)
 
     estimator = tf.contrib.tpu.TPUEstimator(
         use_tpu=FLAGS.use_tpu,
