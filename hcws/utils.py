@@ -1,5 +1,7 @@
 # encoding: utf-8
 import numpy as np
+import io
+from itertools import islice
 
 
 def create_feature_from_tokens(tokenizer, q2b_dict, list_of_text, max_seq_length):
@@ -62,3 +64,23 @@ def label_decode(tokens, labels):
     if output:
         output[-1] = u'{}/{}'.format(output[-1], prev_tag[:-2])
     return output
+
+
+def batch_read_iter(path, batch_size, encoding='utf8'):
+    with io.open(path, encoding=encoding) as f:
+        while True:
+            next_n_lines = list(islice(f, batch_size))
+            if next_n_lines:
+                yield next_n_lines
+            else:
+                raise StopIteration
+
+
+def load_plain_dict(path, encoding='utf8', delimiter='\t', key_index=0, value_index=1):
+    result_dict = {}
+    for line in io.open(path, encoding=encoding):
+        cols = line.strip('\n').split(delimiter)
+        if len(cols) == 2:
+            key, val = cols[key_index], cols[value_index]
+            result_dict[key] = val
+    return result_dict

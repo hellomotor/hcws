@@ -2,7 +2,7 @@ import io
 import os
 import tensorflow as tf
 from absl import flags, app
-from utils import create_feature_from_tokens, label_decode
+from utils import create_feature_from_tokens, label_decode, batch_read_iter, load_plain_dict
 import cPickle
 from bert import tokenization
 import tensorflow.contrib.tensorrt as trt
@@ -54,18 +54,10 @@ def inference(trt_pb_path, tokenizer, q2b_dict, id_to_label):
                                   inter_op_parallelism_threads=0,
                                   intra_op_parallelism_threads=0)
     sess = tf.Session(graph=graph, config=session_conf)
-    batch_of_text = []
-    for line in io.open(FLAGS.input_file, encoding='utf8'):
-        contents = line.strip('\n')[:FLAGS.max_sequence_length]
-        words = [w for w in contents]
-        if len(batch_of_text) < FLAGS.batch_size:
-            batch_of_text.append(words)
-            continue
-        predict(sess, batch_of_text, tokenizer, q2b_dict, input_output_tensors, id_to_label)
-        batch_of_text[:] = []
-    if batch_of_text:
-        predict(sess, batch_of_text, tokenizer, q2b_dict, input_output_tensors, id_to_label)
-        batch_of_text[:] = []
+    for batch_of_line in batch_read_iter(FLAGS.input_file, FLAGS.batch_size):
+        batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
+                           for line in batch_of_line]
+        predict(sess, batch_of_tokens, tokenizer, q2b_dict, input_output_tensors, id_to_label)
 
 
 def predict(session, batch_of_text, tokenizer, q2b_dict, input_output_tensors, id_to_label):
@@ -76,7 +68,8 @@ def predict(session, batch_of_text, tokenizer, q2b_dict, input_output_tensors, i
                  t_segment_ids: feature['segment_ids']}
     pred_ids, seq_lens, input_ids = session.run(
         [t_preds, t_sqls, t_input_ids], feed_dict=feed_dict)
-    for i in range(pred_ids.shape[0]):
+    batch_size = min(len(batch_of_text), pred_ids.shape[0])
+    for i in range(batch_size):
         end = seq_lens[i]  # [CLS] ... [SEP]
         label_ids = pred_ids[i][:end]
         token_ids = input_ids[i][:end]
@@ -89,7 +82,7 @@ def predict(session, batch_of_text, tokenizer, q2b_dict, input_output_tensors, i
 def main(_):
     label_to_id = cPickle.load(open(FLAGS.label_dict_file, 'rb'))
     id_to_label = dict([(v, k) for k, v in label_to_id.items()])
-    q2b_dict = dict([line.strip('\n').split('\t') for line in io.open(FLAGS.q2b_file, encoding='utf8')])
+    q2b_dict = load_plain_dict(FLAGS.q2b_file)
 
     tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
     inference(FLAGS.trt_pb_path, tokenizer, q2b_dict, id_to_label)

@@ -12,7 +12,7 @@ from tensorflow_serving.apis import predict_pb2
 from tensorflow_serving.apis import prediction_service_pb2_grpc
 from tensorflow.python.framework import tensor_util
 from hcws.bert import tokenization
-from hcws.utils import create_feature_from_tokens, label_decode
+from hcws.utils import create_feature_from_tokens, label_decode, batch_read_iter, load_plain_dict
 
 HOME = os.path.expanduser('~')
 
@@ -56,7 +56,8 @@ def predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text):
     seq_lens = tensor_util.MakeNdarray(result.outputs['seq_lens'])
     pred_ids = tensor_util.MakeNdarray(result.outputs['predictions'])
     input_ids = feature['input_ids']
-    for i in range(pred_ids.shape[0]):
+    batch_size = min(len(batch_of_text), pred_ids.shape[0])
+    for i in range(batch_size):
         end = seq_lens[i]  # [CLS] ... [SEP]
         label_ids = pred_ids[i][:end]
         token_ids = input_ids[i][:end]
@@ -69,32 +70,18 @@ def predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text):
 def main(_):
     label_to_id = pickle.load(open(FLAGS.label_dict_file, 'rb'))
     id_to_label = dict([(v, k) for k, v in label_to_id.items()])
-    q2b_dict = dict([line.strip('\n').split('\t') for line in io.open(FLAGS.q2b_file, encoding='utf8')])
+    q2b_dict = load_plain_dict(FLAGS.q2b_file)
 
     tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
-    batch_of_text = []
     stub = create_grpc_stub()
-    for line in io.open(FLAGS.input_file, encoding='utf8'):
-        contents = line.strip()[:FLAGS.max_sequence_length]
-        if not contents:
-            continue
-        if len(batch_of_text) < FLAGS.batch_size:
-            words = [w for w in contents]
-            batch_of_text.append(words)
-            continue
-        predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text)
-        batch_of_text[:] = []
-    print('-' * 120)
-    print(len(batch_of_text))
-    if batch_of_text:
-        predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_text)
-        batch_of_text[:] = []
+    for batch_of_line in batch_read_iter(FLAGS.input_file, FLAGS.batch_size):
+        batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
+                           for line in batch_of_line]
+        predict(stub, tokenizer, q2b_dict, id_to_label, batch_of_tokens)
 
 
 if __name__ == '__main__':
     flags.mark_flag_as_required('input_file')
-    flags.mark_flag_as_required('label_dict_file')
-    flags.mark_flag_as_required('vocab_file')
     flags.mark_flag_as_required('model_name')
     try:
         app.run(main)
