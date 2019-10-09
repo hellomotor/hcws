@@ -33,6 +33,7 @@ def model_fn_builder(bert_config,
             use_one_hot_embeddings=False)
         embedding = model.get_sequence_output()
         output = tf.layers.dropout(embedding, rate=dropout, training=is_training)
+        # B N C
         logits = tf.layers.dense(
             output,
             num_tags,
@@ -54,12 +55,18 @@ def model_fn_builder(bert_config,
             probabilities = tf.nn.softmax(logits, axis=-1)
             pred_ids = tf.argmax(probabilities, axis=-1, output_type=tf.int32)
             if label_ids is not None:
-                cross_entropy = label_ids * tf.log(tf.nn.softmax(logits))
-                cross_entropy = -tf.reduce_sum(cross_entropy, reduction_indices=2)
-                cross_entropy *= tf.to_float(used)
-                cross_entropy = tf.reduce_sum(cross_entropy, reduction_indices=1)
-                cross_entropy /= tf.cast(seq_lengths, tf.float32)
-                loss = tf.reduce_mean(cross_entropy)
+                losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    logits=logits, labels=label_ids)
+                mask = tf.sequence_mask(seq_lengths)
+                losses = tf.boolean_mask(losses, mask)
+                loss = tf.reduce_mean(losses)
+                # one_hot_labels = tf.one_hot(label_ids, depth=num_tags, dtype=tf.float32)
+                # cross_entropy = one_hot_labels * tf.log(probabilities)
+                # cross_entropy = -tf.reduce_sum(cross_entropy, reduction_indices=2)
+                # cross_entropy *= tf.to_float(used)
+                # cross_entropy = tf.reduce_sum(cross_entropy, reduction_indices=1)
+                # cross_entropy /= tf.cast(seq_lengths, tf.float32)
+                # loss = tf.reduce_mean(cross_entropy)
 
         logging.info('*' * 120)
         logging.info('input_ids: {}, input_mask: {}, segment_ids: {}'.format(input_ids, input_mask, segment_ids))
