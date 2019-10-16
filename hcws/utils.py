@@ -66,8 +66,9 @@ def label_decode(tokens, labels):
     return output
 
 
-def batch_read_iter(path, batch_size, encoding='utf8'):
+def batch_read_iter(path, batch_size, encoding='utf8', from_line=None):
     with io.open(path, encoding=encoding) as f:
+        [next(f) for _ in range(from_line)]
         while True:
             next_n_lines = list(islice(f, batch_size))
             if next_n_lines:
