@@ -12,6 +12,7 @@ import os
 import pickle
 from utils import create_feature_from_tokens, label_decode
 
+
 HOME = os.path.expanduser('~')
 
 Q2B_DICT_FILE = os.path.join(HOME, 'git_repo/hcws/scripts/q2b.dic')
@@ -24,6 +25,8 @@ flags.DEFINE_string('q2b_file', Q2B_DICT_FILE, '')
 
 
 def main(_):
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
     with Path(FLAGS.ckpt_dir, 'params.json').open(mode='r') as f:
         params = json.loads(f.read())
 
@@ -39,7 +42,7 @@ def main(_):
     while True:
         sys.stdout.write('=> ')
         sys.stdout.flush()
-        inputs = sys.stdin.readline().strip('\n').decode('utf8')
+        inputs = sys.stdin.readline().strip('\n')
         if inputs.lower() == 'quit':
             break
         words = [w for w in inputs]
@@ -53,7 +56,7 @@ def main(_):
         pred_ids = predictions['predictions'][0][:end]
         labels = [id_to_label.get(_id, 'O') for _id in pred_ids[1:-1]]
         output = label_decode(words, labels)
-        print((u''.join(output)).encode('utf8'))
+        print((u''.join(output)))
 
 
 if __name__ == '__main__':
