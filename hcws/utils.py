@@ -74,7 +74,7 @@ def batch_read_iter(path, batch_size, encoding='utf8', from_line=None):
             if next_n_lines:
                 yield next_n_lines
             else:
-                raise StopIteration
+                return
 
 
 def load_plain_dict(path, encoding='utf8', delimiter='\t', key_index=0, value_index=1):
