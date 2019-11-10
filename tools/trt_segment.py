@@ -1,9 +1,19 @@
+import os
+import sys
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
 from tensorrtserver.api import *
 import pickle
 from absl import flags, app
 from hcws.bert import tokenization
 from hcws.utils import label_decode, batch_read_iter, load_plain_dict
 import numpy as np
+from functools import partial
+
+if sys.version_info >= (3, 0):
+    import queue
+else:
+    import Queue as queue
 
 
 HOME = os.path.expanduser('~')
@@ -26,9 +36,14 @@ flags.DEFINE_integer('batch_size', 32, '')
 FLAGS = flags.FLAGS
 
 
+class UserData:
+    def __init__(self):
+        self._completed_requests = queue.Queue()
+
+
 def create_feature_from_tokens(tokenizer, q2b_dict, list_of_text, max_seq_length):
     # 保存label->index 的map
-    batch_input_ids, batch_input_mask, batch_segment_ids = [], [], []
+    batch_input_tokens, batch_input_ids, batch_input_mask, batch_segment_ids = [], [], [], []
     for text in list_of_text:
         tokens = []
         for word in text:
@@ -62,18 +77,35 @@ def create_feature_from_tokens(tokenizer, q2b_dict, list_of_text, max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
 
+        batch_input_tokens.append(ntokens)
         batch_input_ids.append(np.array(input_ids, dtype=np.int32))
         batch_input_mask.append(np.array(input_mask, dtype=np.int32))
         batch_segment_ids.append(np.array(segment_ids, dtype=np.int32))
 
     return {
+        'input_tokens': batch_input_tokens,
         'input_ids': batch_input_ids,
         'input_mask': batch_input_mask,
         'segment_ids': batch_segment_ids,
     }
 
 
-def main(_):
+def completion_callback(id_to_label, batch_tokens, ctx, request_id):
+    # user_data._completed_requests.put((ctx, request_id, batch_tokens))
+    result = ctx.get_async_run_results(request_id, True)
+    pred_ids = result['predictions']
+    seq_lens = result['seq_lens']
+    bsz = len(pred_ids)
+    for i in range(bsz):
+        end = seq_lens[i][0]  # [CLS] ... [SEP]
+        label_ids = pred_ids[i][:end]
+        labels = [id_to_label.get(_id, 'O') for _id in label_ids[1:-1]]
+        tokens = batch_tokens[i][1:-1]
+        output = label_decode(tokens, labels)
+        print(''.join(output))
+
+
+def async_segment():
     label_to_id = pickle.load(open(FLAGS.label_dict_file, 'rb'))
     id_to_label = dict([(v, k) for k, v in label_to_id.items()])
     q2b_dict = load_plain_dict(FLAGS.q2b_file)
@@ -83,7 +115,37 @@ def main(_):
     model_name = "hcws"
     model_version = -1
     ctx = InferContext(FLAGS.url, protocol, model_name, model_version, FLAGS.verbose)
-    for batch_of_line in batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0):
+
+    user_data = UserData()
+    request_cnt = 0
+    for idx, batch_of_line in enumerate(batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0)):
+        batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
+                           for line in batch_of_line]
+        feature = create_feature_from_tokens(
+                        tokenizer, 
+                        q2b_dict, 
+                        batch_of_tokens, 
+                        FLAGS.max_sequence_length)
+        result = ctx.async_run_with_cb(
+            partial(completion_callback, id_to_label, feature['input_tokens']),
+            { "input_ids": feature['input_ids'], "input_mask": feature['input_mask'], "segment_ids": feature['segment_ids'] },
+            { "predictions": InferContext.ResultFormat.RAW, "seq_lens": InferContext.ResultFormat.RAW },
+            batch_size=FLAGS.batch_size)
+        request_cnt += 1
+
+
+def sync_segment():
+    label_to_id = pickle.load(open(FLAGS.label_dict_file, 'rb'))
+    id_to_label = dict([(v, k) for k, v in label_to_id.items()])
+    q2b_dict = load_plain_dict(FLAGS.q2b_file)
+    tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
+
+    protocol = ProtocolType.from_str(FLAGS.protocol)
+    model_name = "hcws"
+    model_version = -1
+    ctx = InferContext(FLAGS.url, protocol, model_name, model_version, FLAGS.verbose)
+
+    for idx, batch_of_line in enumerate(batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0)):
         batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
                            for line in batch_of_line]
         feature = create_feature_from_tokens(
@@ -98,16 +160,19 @@ def main(_):
             batch_size=FLAGS.batch_size)
         pred_ids = result['predictions']
         seq_lens = result['seq_lens']
-        input_ids = feature['input_ids']
-        bsz = min(len(batch_of_tokens), len(pred_ids))
+        input_tokens = feature['input_tokens']
+        bsz = min(len(input_tokens), len(pred_ids))
         for i in range(bsz):
             end = seq_lens[i][0]  # [CLS] ... [SEP]
             label_ids = pred_ids[i][:end]
-            token_ids = input_ids[i][:end]
             labels = [id_to_label.get(_id, 'O') for _id in label_ids[1:-1]]
-            tokens = tokenizer.convert_ids_to_tokens(token_ids[1:-1])
+            tokens = input_tokens[i][1:-1]
             output = label_decode(tokens, labels)
             print(''.join(output))
+
+
+def main(_):
+    sync_segment()
 
 
 if __name__ == '__main__':
