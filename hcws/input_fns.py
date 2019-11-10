@@ -132,7 +132,7 @@ class CwsProcessor(DataProcessor):
             for line in tqdm(f):
                 words, labels = [], []
                 contents = line.strip('\n')
-                line = re.sub(ur'\s(?=[^\[\]]*])', delimiter, contents)
+                line = re.sub(r'\s(?=[^\[\]]*])', delimiter, contents)
                 for text in self._extract_tokens(line, delimiter=delimiter):
                     i = text.rfind(u'/')
                     if i < 0:
