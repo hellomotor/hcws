@@ -109,7 +109,7 @@ def main(_):
         exporter = tf.estimator.BestExporter(
             name="best_exporter",
             serving_input_receiver_fn=serving_input_receiver_fn,
-            exports_to_keep=2)
+            exports_to_keep=1)
         eval_spec = tf.estimator.EvalSpec(
             input_fn=eval_input_fn,
             exporters=exporter)
