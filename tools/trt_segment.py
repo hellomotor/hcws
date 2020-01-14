@@ -25,6 +25,7 @@ BERT_VOCAB = os.path.join(BERT_BASE_DIR, 'vocab.txt')
 
 flags.DEFINE_string('url', 'localhost:8001', '')
 flags.DEFINE_enum('protocol', 'grpc', enum_values=['http', 'grpc'], help='')
+flags.DEFINE_string('model_name', 'hcws', '')
 flags.DEFINE_bool('verbose', False, '')
 flags.DEFINE_string('input_file', None, '')
 flags.DEFINE_string('label_dict_file', LABEL_DICT_FILE, '')
@@ -112,9 +113,8 @@ def async_segment():
     tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
 
     protocol = ProtocolType.from_str(FLAGS.protocol)
-    model_name = "hcws"
     model_version = -1
-    ctx = InferContext(FLAGS.url, protocol, model_name, model_version, FLAGS.verbose)
+    ctx = InferContext(FLAGS.url, protocol, FLAGS.model_name, model_version, FLAGS.verbose)
 
     user_data = UserData()
     request_cnt = 0
@@ -141,9 +141,8 @@ def sync_segment():
     tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
 
     protocol = ProtocolType.from_str(FLAGS.protocol)
-    model_name = "hcws"
     model_version = -1
-    ctx = InferContext(FLAGS.url, protocol, model_name, model_version, FLAGS.verbose)
+    ctx = InferContext(FLAGS.url, protocol, FLAGS.model_name, model_version, FLAGS.verbose)
 
     for idx, batch_of_line in enumerate(batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0)):
         batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
