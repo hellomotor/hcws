@@ -105,6 +105,7 @@ class CwsProcessor(DataProcessor):
 
     def _extract_tokens(self, inputs, delimiter):
         for text in inputs.split(u' '):
+            if not text: continue
             if text[0] == u'[':
                 i = text.rfind(u']')
                 for t in text[1:i].split(delimiter):
