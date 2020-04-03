@@ -42,7 +42,7 @@ def main(_):
         inputs = sys.stdin.readline().strip()
         if inputs.lower() == 'quit':
             break
-        words = [w for w in inputs]
+        words = [w for w in inputs if not w.isspace()]
         feature = create_feature_from_tokens(tokenizer, q2b_dict, [words], 200)
         predictions = predict_fn({
             'input_ids': feature['input_ids'],
