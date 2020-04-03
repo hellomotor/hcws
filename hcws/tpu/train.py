@@ -7,17 +7,15 @@ import os
 
 from hcws.bert import modeling
 from hcws.input_fns import file_based_input_fn_builder, CwsProcessor
-from model_fns import model_fn_builder
+from hcws.tpu.model_fns import model_fn_builder
 
 flags = tf.flags
 
 flags.DEFINE_string("train_data_path", default=None, help="")
 flags.DEFINE_string("test_data_path", default=None, help="")
-flags.DEFINE_string("label_dict_path", default=None, help="")
 
 flags.DEFINE_integer("train_batch_size", default=16, help="")
 flags.DEFINE_integer("eval_batch_size", default=16, help="")
-flags.DEFINE_integer("predict_batch_size", default=16, help="")
 flags.DEFINE_float("learning_rate", default=1e-5, help="")
 flags.DEFINE_float("dropout", default=0.5, help="")
 flags.DEFINE_integer("max_sequence_length", default=200, help="")
@@ -26,7 +24,7 @@ tf.app.flags.DEFINE_bool("use_crf", default=True, help="")
 flags.DEFINE_string("ckpt_dir", default=None, help="")
 flags.DEFINE_string("export_dir_base", default=None, help="")
 flags.DEFINE_integer("save_checkpoints_steps", default=1000, help="")
-flags.DEFINE_integer("log_step_count_steps", default=100, help="")
+flags.DEFINE_integer("log_step_count_steps", default=1000, help="")
 flags.DEFINE_integer("early_stopping_step", default=4,
                      help="Stop training after #early_stopping_step when loss not decrease")
 
@@ -76,7 +74,7 @@ def main(_):
     processor = CwsProcessor(None)
     params = FLAGS.flag_values_dict()
     label_list = processor.get_labels()
-    with open("{}.json".format(FLAGS.train_data_path)) as f:
+    with tf.gfile.Open("{}.json".format(FLAGS.train_data_path)) as f:
         train_data_info = json.load(f)
 
     tpu_cluster_resolver = None
@@ -96,7 +94,7 @@ def main(_):
             num_shards=FLAGS.num_tpu_cores,
             per_host_input_for_training=is_per_host))
 
-    with open(os.path.join(FLAGS.ckpt_dir, 'params.json'), 'w') as f:
+    with tf.gfile.Open(os.path.join(FLAGS.ckpt_dir, 'params.json'), 'w') as f:
         json.dump(params, f, indent=4, sort_keys=True)
 
     bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
@@ -118,7 +116,6 @@ def main(_):
         config=run_config,
         train_batch_size=FLAGS.train_batch_size,
         eval_batch_size=FLAGS.eval_batch_size,
-        predict_batch_size=FLAGS.predict_batch_size,
         export_to_tpu=False)
 
     if FLAGS.do_train:
@@ -130,7 +127,7 @@ def main(_):
         estimator.train(input_fn=train_input_fn, max_steps=train_data_info['num_train_steps'])
 
     if FLAGS.do_eval:
-        with open("{}.json".format(FLAGS.test_data_path)) as f:
+        with tf.gfile.Open("{}.json".format(FLAGS.test_data_path)) as f:
             eval_data_info = json.load(f)
         num_eval_examples = eval_data_info['num_examples']
 

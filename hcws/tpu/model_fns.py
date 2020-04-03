@@ -38,7 +38,6 @@ def model_fn_builder(bert_config,
             num_tags,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             kernel_regularizer=tf.contrib.layers.l2_regularizer(0.001))
-        # CRF
         used = tf.sign(tf.abs(input_ids))
         seq_lengths = tf.cast(tf.reduce_sum(used, reduction_indices=1), tf.int32)
 
@@ -59,6 +58,8 @@ def model_fn_builder(bert_config,
                 losses = tf.boolean_mask(losses, mask)
                 loss = tf.reduce_mean(losses)
 
+        seq_lengths = tf.identity(seq_lengths, name='seq_lengths')
+        pred_ids = tf.identity(pred_ids, name='pred_ids')
         tvars = tf.trainable_variables()
         scaffold_fn = None
 
