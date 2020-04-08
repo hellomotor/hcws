@@ -1,6 +1,5 @@
 import tensorflow as tf
 from bert import modeling, optimization
-from absl import logging
 
 
 def model_fn_builder(bert_config,

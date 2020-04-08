@@ -9,9 +9,10 @@ from absl import logging
 import pickle
 import re
 from tqdm import tqdm
+from utils import pfr_extract_tokens 
 
-__all__ = ['DataProcessor', 'CwsProcessor', 'write_test_tokens', 'convert_single_example',
-           'filed_based_convert_examples_to_features', 'file_based_input_fn_builder']
+__all__ = ['DataProcessor', 'get_task_processor', 'CwsProcessor', 'NerProcessor', 'write_test_tokens',
+           'convert_single_example', 'filed_based_convert_examples_to_features', 'file_based_input_fn_builder']
 
 
 class InputExample(object):
@@ -103,16 +104,6 @@ class CwsProcessor(DataProcessor):
             examples.append(InputExample(guid=guid, text=text, label=label))
         return examples
 
-    def _extract_tokens(self, inputs, delimiter):
-        for text in inputs.split(u' '):
-            if not text: continue
-            if text[0] == u'[':
-                i = text.rfind(u']')
-                for t in text[1:i].split(delimiter):
-                    yield t
-            else:
-                yield text
-
     def _gen_token_labels(self, token, label):
         """ 
         :param token: 迈向
@@ -130,11 +121,10 @@ class CwsProcessor(DataProcessor):
         delimiter = u'\x002'
         with codecs.open(input_file, 'r', encoding='utf-8') as f:
             lines = []
-            for line in tqdm(f):
+            for i, line in enumerate(f):
                 words, labels = [], []
-                contents = line.strip('\n')
-                line = re.sub(r'\s(?=[^\[\]]*])', delimiter, contents)
-                for text in self._extract_tokens(line, delimiter=delimiter):
+                line = line.strip('\n')
+                for text in pfr_extract_tokens(line):
                     i = text.rfind(u'/')
                     if i < 0:
                         continue
@@ -145,9 +135,23 @@ class CwsProcessor(DataProcessor):
                     words.extend(chars)
                     labels.extend(tags)
                 lines.append([' '.join(labels), ' '.join(words)])
-                if contents.startswith("-DOCSTART-"):
+                if line.startswith("-DOCSTART-"):
                     continue
             return lines
+
+
+class NerProcessor(CwsProcessor):
+    def get_labels(self, labels=None):
+        """person, org, time, location, jobtitle"""
+        return ["O", "person_B", "person_I", "org_B", "org_I", "time_B", "time_I",
+                "location_B", "location_I", "jobtitle_B", "jobtitle_I", "X", "[CLS]", "[SEP]"]
+
+
+def get_task_processor(name, *args):
+    processors = {'cws': CwsProcessor, 'ner': NerProcessor}
+    if name not in processors:
+        raise ValueError('invalid task name, options are: [cws, ner]')
+    return processors[name](*args)
 
 
 def write_test_tokens(tokens, output_dir):
@@ -201,10 +205,16 @@ def convert_single_example(ex_index, example, label_map, max_seq_length, tokeniz
     ntokens.append("[CLS]")  # 句子开始设置CLS 标志
     segment_ids.append(0)
     label_ids.append(label_map["[CLS]"])  # O OR CLS 没有任何影响，不过我觉得O 会减少标签个数,不过拒收和句尾使用不同的标志来标注，使用LCS 也没毛病
-    for i, token in enumerate(tokens):
-        ntokens.append(token)
-        segment_ids.append(0)
-        label_ids.append(label_map[labels[i]])
+    try:
+        for i, token in enumerate(tokens):
+            ntokens.append(token)
+            segment_ids.append(0)
+            label_ids.append(label_map[labels[i]])
+    except:
+        print('*' * 120)
+        print(example.text)
+        print(example.label)
+        print('*' * 120)
     ntokens.append("[SEP]")  # 句尾添加[SEP] 标志
     segment_ids.append(0)
     # append("O") or append("[SEP]") not sure!

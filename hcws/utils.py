@@ -85,3 +85,38 @@ def load_plain_dict(path, encoding='utf8', delimiter='\t', key_index=0, value_in
             key, val = cols[key_index], cols[value_index]
             result_dict[key] = val
     return result_dict
+
+
+def pfr_extract_tokens(text):
+    def remove_bracket(t):
+        tokenLen = len(t)
+        while tokenLen > 0 and t[tokenLen - 1] != ']':
+            tokenLen = tokenLen - 1
+        return t[1:tokenLen - 1]
+
+    nn = len(text)
+    left_brkt_seen = False
+    start = 0
+    for i in range(nn):
+        if text[i] == ' ':
+            if not left_brkt_seen:
+                token = text[start:i]
+                if token[0] == '[':
+                    token = remove_bracket(token)
+                    for s in token.split(' '):
+                        yield s
+                else:
+                    yield token
+                start = i + 1
+        elif text[i] == '[':
+            left_brkt_seen = True
+        elif text[i] == ']':
+            left_brkt_seen = False
+    if start < nn:
+        token = text[start:]
+        if token[0] == '[':
+            token = remove_bracket(token)
+            for s in token.split(' '):
+                yield s
+        else:
+            yield token
