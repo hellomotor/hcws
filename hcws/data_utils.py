@@ -4,12 +4,13 @@ import os
 import tensorflow as tf
 from absl import flags, app, logging
 
-from input_fns import filed_based_convert_examples_to_features, CwsProcessor, file_based_input_fn_builder
+from input_fns import filed_based_convert_examples_to_features, get_task_processor, file_based_input_fn_builder
 from bert import tokenization
 
 Q2B_DICT_FILE = '/home/heqing/git_repo/kcws/scripts/q2b.dic'
 
 FLAGS = flags.FLAGS
+flags.DEFINE_string("task_name", None, "")
 flags.DEFINE_string("data_dir", None, "")
 flags.DEFINE_string("vocab_file", None, "")
 flags.DEFINE_string("labels_file", None, "")
@@ -27,7 +28,7 @@ def dump_dataset_info(output_dir, split, split_info):
 
 
 def main(_):
-    processor = CwsProcessor(FLAGS.output_dir)
+    processor = get_task_processor(FLAGS.task_name, FLAGS.output_dir)
     tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
 
     train_examples = processor.get_train_examples(FLAGS.data_dir)
@@ -117,6 +118,7 @@ class TestDataUtils(tf.test.TestCase):
 
 
 if __name__ == '__main__':
+    flags.mark_flag_as_required('task_name')
     flags.mark_flag_as_required('data_dir')
     flags.mark_flag_as_required('vocab_file')
     flags.mark_flag_as_required('output_dir')

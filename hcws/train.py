@@ -6,10 +6,12 @@ import tensorflow as tf
 import os
 
 from bert import modeling
-from input_fns import file_based_input_fn_builder, CwsProcessor
+from input_fns import file_based_input_fn_builder, get_task_processor
 from model_fns import model_fn_builder
 
 flags = tf.flags
+
+flags.DEFINE_string("task_name", default=None, help="")
 
 flags.DEFINE_string("train_data_path", default=None, help="")
 flags.DEFINE_string("test_data_path", default=None, help="")
@@ -40,7 +42,7 @@ FLAGS = flags.FLAGS
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
-    processor = CwsProcessor(None)
+    processor = get_task_processor(FLAGS.task_name, None)
     params = FLAGS.flag_values_dict()
     label_list = processor.get_labels()
     with open("{}.json".format(FLAGS.train_data_path)) as f:
