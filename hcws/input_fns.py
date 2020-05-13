@@ -143,7 +143,7 @@ class CwsProcessor(DataProcessor):
 class NerProcessor(CwsProcessor):
     def get_labels(self, labels=None):
         """person, org, time, location, jobtitle"""
-        return ["O", "person_B", "person_I", "org_B", "org_I", "time_B", "time_I",
+        return ["O", "na_B", "na_I", "person_B", "person_I", "org_B", "org_I", "time_B", "time_I",
                 "location_B", "location_I", "jobtitle_B", "jobtitle_I", "X", "[CLS]", "[SEP]"]
 
 
@@ -205,16 +205,10 @@ def convert_single_example(ex_index, example, label_map, max_seq_length, tokeniz
     ntokens.append("[CLS]")  # 句子开始设置CLS 标志
     segment_ids.append(0)
     label_ids.append(label_map["[CLS]"])  # O OR CLS 没有任何影响，不过我觉得O 会减少标签个数,不过拒收和句尾使用不同的标志来标注，使用LCS 也没毛病
-    try:
-        for i, token in enumerate(tokens):
-            ntokens.append(token)
-            segment_ids.append(0)
-            label_ids.append(label_map[labels[i]])
-    except:
-        print('*' * 120)
-        print(example.text)
-        print(example.label)
-        print('*' * 120)
+    for i, token in enumerate(tokens):
+        ntokens.append(token)
+        segment_ids.append(0)
+        label_ids.append(label_map[labels[i]])
     ntokens.append("[SEP]")  # 句尾添加[SEP] 标志
     segment_ids.append(0)
     # append("O") or append("[SEP]") not sure!
