@@ -11,11 +11,6 @@ import numpy as np
 import json
 from tabulate import tabulate
 
-if sys.version_info >= (3, 0):
-    import queue
-else:
-    import Queue as queue
-
 
 HOME = os.path.expanduser('~')
 
@@ -26,6 +21,7 @@ BERT_VOCAB = os.path.join(BERT_BASE_DIR, 'vocab.txt')
 
 flags.DEFINE_string('url', 'localhost:8001', '')
 flags.DEFINE_enum('protocol', 'grpc', enum_values=['http', 'grpc'], help='')
+flags.DEFINE_enum('output_format', 'brat', enum_values=['brat', 'jsonl'], help='')
 flags.DEFINE_string('model_name', 'ent', '')
 flags.DEFINE_bool('verbose', False, '')
 flags.DEFINE_string('input_file', None, '')
@@ -97,40 +93,92 @@ def main(_):
     model_version = -1
     ctx = InferContext(FLAGS.url, protocol, FLAGS.model_name, model_version, FLAGS.verbose)
 
-    for idx, batch_of_line in enumerate(batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0)):
-        batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
-                           for line in batch_of_line]
-        feature = create_feature_from_tokens(
-                        tokenizer, 
-                        q2b_dict, 
-                        batch_of_tokens, 
-                        FLAGS.max_sequence_length)
-        result = ctx.run(
-            {  "input_ids": feature['input_ids'], "input_mask": feature['input_mask'], 
-               "segment_ids": feature['segment_ids']},
-            { "predictions": InferContext.ResultFormat.RAW, "seq_lens": InferContext.ResultFormat.RAW },
-            batch_size=FLAGS.batch_size)
-        pred_ids = result['predictions']
-        seq_lens = result['seq_lens']
-        input_ids = feature['input_ids']
-        bsz = len(pred_ids)
-        for i in range(bsz):
-            end = seq_lens[i][0]  # [CLS] ... [SEP]
-            label_ids = pred_ids[i][:end][1:-1]
-            labels = [id_to_label[_id] for _id in label_ids]
-            token_ids = input_ids[i][:end][1:-1]
-            tokens = tokenizer.convert_ids_to_tokens(token_ids)
-            output = ''.join(label_decode(tokens, labels))
-            text, labels, index = [], [], 0
-            for item in output.split(' '):
-                token, pos = item.split('/')
-                text.append(token)
-                if pos != 'na':
-                    labels.append([index, index + len(token), pos])
-                index += len(token)
-            print(json.dumps({'text': ''.join(text), 'labels': labels}, ensure_ascii=False))
+    if not FLAGS.input_file:
+        while True:
+            sys.stdout.write('=> ')
+            sys.stdout.flush()
+            inputs = sys.stdin.readline().strip()
+            if not inputs:
+                break
+            batch_of_line = [inputs]
+            batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
+                                   for line in batch_of_line]
+            feature = create_feature_from_tokens(
+                            tokenizer, 
+                            q2b_dict, 
+                            batch_of_tokens, 
+                            FLAGS.max_sequence_length)
+            result = ctx.run(
+                {  "input_ids": feature['input_ids'], "input_mask": feature['input_mask'], 
+                   "segment_ids": feature['segment_ids']},
+                { "predictions": InferContext.ResultFormat.RAW, "seq_lens": InferContext.ResultFormat.RAW },
+                batch_size=FLAGS.batch_size)
+            pred_ids = result['predictions']
+            seq_lens = result['seq_lens']
+            input_ids = feature['input_ids']
+            bsz = len(pred_ids)
+            for i in range(bsz):
+                end = seq_lens[i][0]  # [CLS] ... [SEP]
+                label_ids = pred_ids[i][:end][1:-1]
+                labels = [id_to_label[_id] for _id in label_ids]
+                token_ids = input_ids[i][:end][1:-1]
+                tokens = tokenizer.convert_ids_to_tokens(token_ids)
+                output = ''.join(label_decode(tokens, labels))
+                text, labels, index = [], [], 0
+                for item in output.split(' '):
+                    token, pos = item.split('/')
+                    text.append(token)
+                    if pos != 'na':
+                        labels.append([index, index + len(token), pos])
+                    index += len(token)
+                text = ''.join(text)
+                print(json.dumps({'text': text, 'labels': labels}, ensure_ascii=False))
+                for l in labels:
+                    print(f'{l[-1]}\t{text[l[0]:l[1]]}')
+    else:
+        entity_index, char_index = 0, 0
+        for idx, batch_of_line in enumerate(batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0)):
+            batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
+                               for line in batch_of_line]
+            feature = create_feature_from_tokens(
+                            tokenizer, 
+                            q2b_dict, 
+                            batch_of_tokens, 
+                            FLAGS.max_sequence_length)
+            result = ctx.run(
+                {  "input_ids": feature['input_ids'], "input_mask": feature['input_mask'], 
+                   "segment_ids": feature['segment_ids']},
+                { "predictions": InferContext.ResultFormat.RAW, "seq_lens": InferContext.ResultFormat.RAW },
+                batch_size=FLAGS.batch_size)
+            pred_ids = result['predictions']
+            seq_lens = result['seq_lens']
+            input_ids = feature['input_ids']
+            bsz = len(pred_ids)
+            for i in range(bsz):
+                end = seq_lens[i][0]  # [CLS] ... [SEP]
+                label_ids = pred_ids[i][:end][1:-1]
+                labels = [id_to_label[_id] for _id in label_ids]
+                token_ids = input_ids[i][:end][1:-1]
+                tokens = tokenizer.convert_ids_to_tokens(token_ids)
+                output = ''.join(label_decode(tokens, labels))
+                text, labels, index = [], [], 0
+                for item in output.split(' '):
+                    token, pos = item.split('/')
+                    text.append(token)
+                    if pos != 'na':
+                        labels.append([index, index + len(token), pos])
+                    index += len(token)
+                if FLAGS.output_format == 'jsonl':
+                    print(json.dumps({'text': ''.join(text), 'labels': labels}, ensure_ascii=False))
+                else:
+                    a = ''.join(text)
+                    for l in labels:
+                        entity_index += 1
+                        start, end = char_index + l[0], char_index + l[1]
+                        print(f'T{entity_index}\t{l[-1].upper()} {start} {end}\t{a[l[0]:l[1]]}')
+                    char_index += len(batch_of_line[i])
 
 
 if __name__ == '__main__':
-    flags.mark_flag_as_required('input_file')
+    # flags.mark_flag_as_required('input_file')
     app.run(main)

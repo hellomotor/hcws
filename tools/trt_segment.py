@@ -20,7 +20,7 @@ HOME = os.path.expanduser('~')
 
 Q2B_DICT_FILE = os.path.join(HOME, 'git_repo/hcws/scripts/q2b.dic')
 LABEL_DICT_FILE = os.path.join(HOME, 'git_repo/hcws/corpus/RMRB/train/label2id.pkl')
-BERT_BASE_DIR = os.path.join(HOME, 'git_repo/tf_ner/bert_lstm_crf/chinese_L-12_H-768_A-12')
+BERT_BASE_DIR = os.path.join(HOME, 'git_repo/OpenCorpus/bert_model/chinese_L-12_H-768_A-12')
 BERT_VOCAB = os.path.join(BERT_BASE_DIR, 'vocab.txt')
 
 flags.DEFINE_string('url', 'localhost:8001', '')
