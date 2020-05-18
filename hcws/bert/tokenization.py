@@ -182,6 +182,84 @@ class FullTokenizer(object):
     return convert_by_vocab(self.inv_vocab, ids)
 
 
+class BertTokenizer(object):
+  """Runs end-to-end tokenziation."""
+
+  def __init__(self, vocab_file, do_lower_case=True):
+    self.vocab = load_vocab(vocab_file)
+    self.inv_vocab = {v: k for k, v in self.vocab.items()}
+    self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
+    self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
+    self.do_lower_case = do_lower_case
+    self.unk_id = self.vocab['[UNK]']
+
+  def tokenize(self, text):
+    split_tokens = []
+    for token in self.basic_tokenizer.tokenize(text):
+      if len(token) == 1 and self.basic_tokenizer._is_chinese_char(ord(token[0])):
+        split_tokens.append(token)
+      else:
+        for sub_token in self.wordpiece_tokenizer.tokenize(token):
+          split_tokens.append(sub_token)
+
+    return split_tokens
+
+  def _is_special(self, ch):
+    """判断是不是有特殊含义的符号
+    """
+    return bool(ch) and (ch[0] == '[') and (ch[-1] == ']')
+
+  def stem(self, token):
+    """获取token的“词干”（如果是##开头，则自动去掉##）
+    """
+    if token[:2] == '##':
+        return token[2:]
+    else:
+        return token
+
+  def rematch(self, text, tokens):
+    """给出原始的text和tokenize后的tokens的映射关系
+    """
+    text = convert_to_unicode(text)
+
+    if self.do_lower_case:
+      text = text.lower()
+
+    normalized_text, char_mapping = '', []
+    for i, ch in enumerate(text):
+      if self.do_lower_case:
+        ch = unicodedata.normalize('NFD', ch)
+        ch = ''.join([c for c in ch if unicodedata.category(c) != 'Mn'])
+        ch = ''.join([
+          c for c in ch
+          if not (ord(c) == 0 or ord(c) == 0xfffd or _is_control(c))
+        ])
+        normalized_text += ch
+        char_mapping.extend([i] * len(ch))
+
+    if self.do_lower_case:
+      normalized_text = normalized_text.lower()
+
+    text, token_mapping, offset = normalized_text, [], 0
+    for token in tokens:
+      if self._is_special(token):
+        token_mapping.append([])
+      else:
+        token = self.stem(token)
+        start = text[offset:].index(token) + offset
+        end = start + len(token)
+        token_mapping.append(char_mapping[start:end])
+        offset = end
+
+    return token_mapping
+
+  def convert_tokens_to_ids(self, tokens):
+    return [self.vocab.get(token, self.unk_id) for token in tokens]
+
+  def convert_ids_to_tokens(self, ids):
+    return convert_by_vocab(self.inv_vocab, ids)
+
+
 class BasicTokenizer(object):
   """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
