@@ -37,19 +37,14 @@ flags.DEFINE_integer('batch_size', 32, '')
 FLAGS = flags.FLAGS
 
 
-class UserData:
-    def __init__(self):
-        self._completed_requests = queue.Queue()
-
-
-def create_feature_from_tokens(tokenizer, q2b_dict, list_of_text, max_seq_length):
+def create_feature_from_tokens(tokenizer, list_of_text, max_seq_length):
     # 保存label->index 的map
     batch_input_tokens, batch_input_ids, batch_input_mask, batch_segment_ids = [], [], [], []
     for text in list_of_text:
         tokens = []
         for word in text:
             # 分词，如果是中文，就是分字,但是对于一些不在BERT的vocab.txt中得字符会被进行WordPice处理（例如中文的引号），可以将所有的分字操作替换为list(input)
-            token = tokenizer.tokenize(q2b_dict.get(word, word))
+            token = tokenizer.tokenize(word)
             tokens.extend(token)
         # 序列截断
         if len(tokens) >= max_seq_length - 1:
@@ -91,65 +86,22 @@ def create_feature_from_tokens(tokenizer, q2b_dict, list_of_text, max_seq_length
     }
 
 
-def completion_callback(id_to_label, batch_tokens, ctx, request_id):
-    # user_data._completed_requests.put((ctx, request_id, batch_tokens))
-    result = ctx.get_async_run_results(request_id, True)
-    pred_ids = result['predictions']
-    seq_lens = result['seq_lens']
-    bsz = len(pred_ids)
-    for i in range(bsz):
-        end = seq_lens[i][0]  # [CLS] ... [SEP]
-        label_ids = pred_ids[i][:end]
-        labels = [id_to_label.get(_id, 'O') for _id in label_ids[1:-1]]
-        tokens = batch_tokens[i][1:-1]
-        output = label_decode(tokens, labels)
-        print(''.join(output))
-
-
-def async_segment():
+def main(_):
     label_to_id = pickle.load(open(FLAGS.label_dict_file, 'rb'))
     id_to_label = dict([(v, k) for k, v in label_to_id.items()])
     q2b_dict = load_plain_dict(FLAGS.q2b_file)
-    tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
-
-    protocol = ProtocolType.from_str(FLAGS.protocol)
-    model_version = -1
-    ctx = InferContext(FLAGS.url, protocol, FLAGS.model_name, model_version, FLAGS.verbose)
-
-    user_data = UserData()
-    request_cnt = 0
-    for idx, batch_of_line in enumerate(batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0)):
-        batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
-                           for line in batch_of_line]
-        feature = create_feature_from_tokens(
-                        tokenizer, 
-                        q2b_dict, 
-                        batch_of_tokens, 
-                        FLAGS.max_sequence_length)
-        result = ctx.async_run_with_cb(
-            partial(completion_callback, id_to_label, feature['input_tokens']),
-            { "input_ids": feature['input_ids'], "input_mask": feature['input_mask'], "segment_ids": feature['segment_ids'] },
-            { "predictions": InferContext.ResultFormat.RAW, "seq_lens": InferContext.ResultFormat.RAW },
-            batch_size=FLAGS.batch_size)
-        request_cnt += 1
-
-
-def sync_segment():
-    label_to_id = pickle.load(open(FLAGS.label_dict_file, 'rb'))
-    id_to_label = dict([(v, k) for k, v in label_to_id.items()])
-    q2b_dict = load_plain_dict(FLAGS.q2b_file)
-    tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
+    # tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
+    tokenizer = tokenization.BertTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=True)
 
     protocol = ProtocolType.from_str(FLAGS.protocol)
     model_version = -1
     ctx = InferContext(FLAGS.url, protocol, FLAGS.model_name, model_version, FLAGS.verbose)
 
     for idx, batch_of_line in enumerate(batch_read_iter(FLAGS.input_file, FLAGS.batch_size, from_line=0)):
-        batch_of_tokens = [(w for w in line.strip('\n')[:FLAGS.max_sequence_length])
+        batch_of_tokens = [[q2b_dict.get(w, w) for w in line.strip('\n')[:FLAGS.max_sequence_length]]
                            for line in batch_of_line]
         feature = create_feature_from_tokens(
                         tokenizer, 
-                        q2b_dict, 
                         batch_of_tokens, 
                         FLAGS.max_sequence_length)
         result = ctx.run(
@@ -165,13 +117,13 @@ def sync_segment():
             end = seq_lens[i][0]  # [CLS] ... [SEP]
             label_ids = pred_ids[i][:end]
             labels = [id_to_label.get(_id, 'O') for _id in label_ids[1:-1]]
-            tokens = input_tokens[i][1:-1]
-            output = label_decode(tokens, labels)
+
+            tokens = input_tokens[i][:end][1:-1]
+            text = ''.join(batch_of_tokens[i])
+            mapping = tokenizer.rematch(text, tokens)
+            orig_tokens = [text[m[0]:m[-1] + 1] for m in mapping]
+            output = label_decode(orig_tokens, labels)
             print(''.join(output))
-
-
-def main(_):
-    sync_segment()
 
 
 if __name__ == '__main__':
