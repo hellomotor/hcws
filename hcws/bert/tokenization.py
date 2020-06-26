@@ -182,83 +182,6 @@ class FullTokenizer(object):
     return convert_by_vocab(self.inv_vocab, ids)
 
 
-class BertTokenizer(object):
-  """Runs end-to-end tokenziation."""
-
-  def __init__(self, vocab_file, do_lower_case=True):
-    self.vocab = load_vocab(vocab_file)
-    self.inv_vocab = {v: k for k, v in self.vocab.items()}
-    self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
-    self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
-    self.do_lower_case = do_lower_case
-    self.unk_id = self.vocab['[UNK]']
-
-  def tokenize(self, text):
-    split_tokens = []
-    for token in self.basic_tokenizer.tokenize(text):
-      if len(token) == 1 and self.basic_tokenizer._is_chinese_char(ord(token[0])):
-        split_tokens.append(token)
-      else:
-        for sub_token in self.wordpiece_tokenizer.tokenize(token):
-          split_tokens.append(sub_token)
-
-    return split_tokens
-
-  def _is_special(self, ch):
-    """判断是不是有特殊含义的符号
-    """
-    return bool(ch) and (ch[0] == '[') and (ch[-1] == ']')
-
-  def stem(self, token):
-    """获取token的“词干”（如果是##开头，则自动去掉##）
-    """
-    if token[:2] == '##':
-        return token[2:]
-    else:
-        return token
-
-  def rematch(self, text, tokens):
-    """给出原始的text和tokenize后的tokens的映射关系
-    """
-    text = convert_to_unicode(text)
-
-    if self.do_lower_case:
-      text = text.lower()
-
-    normalized_text, char_mapping = '', []
-    for i, ch in enumerate(text):
-      if self.do_lower_case:
-        ch = unicodedata.normalize('NFD', ch)
-        ch = ''.join([c for c in ch if unicodedata.category(c) != 'Mn'])
-        ch = ''.join([
-          c for c in ch
-          if not (ord(c) == 0 or ord(c) == 0xfffd or _is_control(c))
-        ])
-        normalized_text += ch
-        char_mapping.extend([i] * len(ch))
-
-    if self.do_lower_case:
-      normalized_text = normalized_text.lower()
-
-    text, token_mapping, offset = normalized_text, [], 0
-    for token in tokens:
-      if self._is_special(token):
-        token_mapping.append([])
-      else:
-        token = self.stem(token)
-        start = text[offset:].index(token) + offset
-        end = start + len(token)
-        token_mapping.append(char_mapping[start:end])
-        offset = end
-
-    return token_mapping
-
-  def convert_tokens_to_ids(self, tokens):
-    return [self.vocab.get(token, self.unk_id) for token in tokens]
-
-  def convert_ids_to_tokens(self, ids):
-    return convert_by_vocab(self.inv_vocab, ids)
-
 
 class BasicTokenizer(object):
   """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
@@ -435,6 +358,108 @@ class WordpieceTokenizer(object):
       else:
         output_tokens.extend(sub_tokens)
     return output_tokens
+
+
+class BertBasicTokenizer(BasicTokenizer):
+    def tokenize(self, text):
+        """Tokenizes a piece of text."""
+        text = convert_to_unicode(text)
+        text = self._clean_text(text)
+
+        # This was added on November 1st, 2018 for the multilingual and Chinese
+        # models. This is also applied to the English models now, but it doesn't
+        # matter since the English models were not trained on any Chinese data
+        # and generally don't have any Chinese data in them (there are Chinese
+        # characters in the vocabulary because Wikipedia does have some Chinese
+        # words in the English Wikipedia.).
+        split_tokens = []
+        for seg in re.split('(\[/*E[12]\])', text):
+            if seg in ('[E1]', '[/E1]', '[E2]', '[/E2]'):
+                split_tokens.append(seg)
+            else:
+                for token in whitespace_tokenize(self._tokenize_chinese_chars(seg)):
+                    if self.do_lower_case:
+                        token = token.lower()
+                        token = self._run_strip_accents(token)
+                    split_tokens.extend(self._run_split_on_punc(token))
+        output_tokens = whitespace_tokenize(" ".join(split_tokens))
+        return output_tokens
+
+
+class BertTokenizer(object):
+  """Runs end-to-end tokenziation."""
+
+  def __init__(self, vocab_file, do_lower_case=True):
+    self.vocab = load_vocab(vocab_file)
+    self.inv_vocab = {v: k for k, v in self.vocab.items()}
+    self.basic_tokenizer = BertBasicTokenizer(do_lower_case=do_lower_case)
+    self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
+    self.do_lower_case = do_lower_case
+    self.unk_id = self.vocab['[UNK]']
+
+  def tokenize(self, text):
+    split_tokens = []
+    for token in self.basic_tokenizer.tokenize(text):
+      if len(token) == 1 and self.basic_tokenizer._is_chinese_char(ord(token[0])):
+        split_tokens.append(token)
+      else:
+        for sub_token in self.wordpiece_tokenizer.tokenize(token):
+          split_tokens.append(sub_token)
+
+    return split_tokens
+
+  def _is_special(self, ch):
+    """判断是不是有特殊含义的符号
+    """
+    return bool(ch) and (ch[0] == '[') and (ch[-1] == ']')
+
+  def _is_entity_marker(self, ch):
+    return bool(ch) and ch in ('[E1]', '[/E1]', '[E2]', '[/E2]')
+
+  def stem(self, token):
+    """获取token的“词干”（如果是##开头，则自动去掉##）
+    """
+    if token[:2] == '##':
+        return token[2:]
+    else:
+        return token
+
+  def rematch(self, text, tokens):
+    """给出原始的text和tokenize后的tokens的映射关系
+    """
+    text = convert_to_unicode(text)
+
+    normalized_text, char_mapping = '', []
+    for i, ch in enumerate(text):
+      if self.do_lower_case:
+        ch = unicodedata.normalize('NFD', ch)
+        ch = ''.join([c for c in ch if unicodedata.category(c) != 'Mn'])
+        ch = ''.join([
+          c for c in ch
+          if not (ord(c) == 0 or ord(c) == 0xfffd or _is_control(c))
+        ])
+        normalized_text += ch
+        char_mapping.extend([i] * len(ch))
+
+    text, token_mapping, offset = normalized_text, [], 0
+    for token in tokens:
+      # [CLS] [SEP] not in origin text
+      if self._is_special(token) and not self._is_entity_marker(token):
+        token_mapping.append([])
+      else: # [E1], [/E1], [E2], [/E2] treat as common token
+        token = self.stem(token)
+        start = text[offset:].index(token) + offset
+        end = start + len(token)
+        token_mapping.append(char_mapping[start:end])
+        offset = end
+
+    return token_mapping
+
+  def convert_tokens_to_ids(self, tokens):
+    return [self.vocab.get(token, self.unk_id) for token in tokens]
+
+  def convert_ids_to_tokens(self, ids):
+    return convert_by_vocab(self.inv_vocab, ids)
 
 
 def _is_whitespace(char):
